@@ -15,11 +15,15 @@ async function run({ input, router }) {
     if (!response.ok) throw new Error('Network response was not ok');
 
     const data = await response.json();
-    router.push(`/result?response=${encodeURIComponent(data.response)}`);
+    // Pass the typed input along as a query param
+    router.push(
+      `/result?response=${encodeURIComponent(data.response)}&input=${encodeURIComponent(input)}`
+    );
   } catch (error) {
     console.error('Error during chat session:', error);
   }
 }
+
 
 export default function Home() {
   const router = useRouter();
