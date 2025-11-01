@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/router';
 import { marked } from "marked";
+import * as motion from "motion/react-client";
 
 const getHTMLFromMarkdown = (markdown) => {
     if (!markdown) {
