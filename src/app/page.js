@@ -141,7 +141,7 @@ export default function Home() {
             }}
             {...(erasePieces ? {
               animate: { x: 0, y: 0, opacity: 0 }, // keep x/y fixed, only fade
-              transition: { duration: 1, ease: "easeIn" }
+              transition: { duration: 0.2, ease: "easeIn" }
             } : {})}
           />
         ))}
@@ -153,7 +153,7 @@ export default function Home() {
             style={puzzleBounds} // shadow and exact position/size
           >
             <motion.div
-              className="w-full h-full flex flex-col items-center justify-center backdrop-blur-md bg-white/90 rounded-3xl p-8"
+              className="w-full h-full flex flex-col items-center justify-center backdrop-blur-md bg-white/90 rounded-3xl p-8 z-20"
               initial={{ clipPath: 'polygon(100% 100%, 100% 100%, 100% 100%, 100% 100%)' }}
               animate={{ clipPath: 'polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)' }}
               transition={{ duration: 0.7, ease: "easeInOut" }}
