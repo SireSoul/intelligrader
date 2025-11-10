@@ -385,26 +385,43 @@ export default function Home() {
         {showForm && (
           // raised wrapper so reflection sits above background layers
           <div className="absolute rounded-3xl shadow-2xl relative z-[40]" style={puzzleBounds}>
-            {/* REFLECTION (Reflective Glass only) */}
-            {activeBgEffect === 'reflective' && (
+            {activeBgEffect === "reflective" && (
               <motion.div
-                className="pointer-events-none absolute left-0 right-0 z-[41]"
+                className="absolute left-0 right-0 pointer-events-none z-[41]"
                 style={{
-                  top: 'calc(100% + 10px)',
-                  height: '100%',
-                  transform: 'scaleY(-1)',
-                  transformOrigin: 'top',
-                  maskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0))',
-                  WebkitMaskImage: 'linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0))',
+                  top: "calc(100% + 5px)",
+                  transformOrigin: "top",
+                  maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0))",
+                  WebkitMaskImage: "linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0))",
                   opacity: 1,
-                  filter: 'blur(3px)',
+                  filter:
+                    "url(#rippleFilter) blur(3px) brightness(1.05) contrast(1.05)",
                 }}
-                animate={{ y: [0, 3, -2, 0] }}
-                transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+                animate={{
+                  y: [0, 1.5, -1.5, 0],
+                }}
+                transition={{
+                  duration: 12, // slower movement
+                  repeat: Infinity,
+                  ease: "easeInOut",
+                }}
                 aria-hidden
               >
-                {/* mirrored silhouette of the card */}
-                <div className="w-full h-full backdrop-blur-md bg-white/90 rounded-3xl shadow-2xl" />
+                {/* Calm, right-side-up reflection */}
+                <motion.div
+                  className="w-full h-full flex flex-col items-center justify-center backdrop-blur-md bg-white/75 rounded-3xl shadow-xl p-8"
+                >
+                  {/* Simplified reflection content */}
+                 <button
+                  type="submit"
+                  className="w-full py-3 text-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg hover:scale-105 transition-transform"
+                  style={{
+                    transform: "translateY(35px)", // drop it slightly below
+                  }}
+                >
+                  ʍou ǝpɐɹꓨ
+                </button>
+                </motion.div>
               </motion.div>
             )}
 
@@ -624,6 +641,9 @@ export default function Home() {
                 <button
                   type="submit"
                   className="px-6 py-3 text-lg font-semibold text-white bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl shadow-lg hover:scale-105 transition-transform"
+                  style={{
+                    transform: "translateY(35px)"
+                  }}
                 >
                   Grade Now
                 </button>
@@ -637,10 +657,10 @@ export default function Home() {
                     boxShadow: "0 0 25px rgba(120,120,120,0.2)",
                   }}
                   animate={{
-                    opacity: [0.3, 0.6, 0.3],
+                    opacity: [0.3, 1, 0.3],
                     boxShadow: [
                       "0 0 20px rgba(255,255,255,0.05)",
-                      "0 0 30px rgba(255,255,255,0.15)",
+                      "0 0 30px rgba(255,255,255,0.35)",
                       "0 0 20px rgba(255,255,255,0.05)",
                     ],
                   }}
