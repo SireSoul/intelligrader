@@ -687,17 +687,23 @@ export default function Home() {
       )}
 
       {/* --- Tiny Easter Egg: 2D in a 3D World --- */}
-      <div className="fixed right-3 bottom-[4.5rem] z-[90]">
+      <div className="fixed right-3 bottom-[4.5rem] z-[90] group">
         <button
           aria-label="2D in a 3D World"
           onClick={() => router.push('/2d-in-3d-world')}
-          className="group w-8 h-8 rounded-full bg-black/30 backdrop-blur-md border border-white/20
-                    flex items-center justify-center opacity-40 hover:opacity-100
-                    transition-all duration-300 hover:scale-110 shadow-[0_0_8px_rgba(0,0,0,0.25)]"
+          className="w-8 h-8 rounded-full bg-white/30 border border-white/20
+              flex items-center justify-center opacity-40 hover:opacity-100
+              transition-all duration-300 hover:scale-110 shadow-[0_0_8px_rgba(0,0,0,0.25)]"
           title="2D in a 3D World"
         >
           {/* Minimalistic “2D cube” icon */}
-          <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="white" strokeWidth="2">
+          <svg
+            viewBox="0 0 24 24"
+            className="w-4 h-4"
+            fill="none"
+            stroke="white"
+            strokeWidth="2"
+          >
             <rect x="5" y="5" width="10" height="10" rx="2" />
             <path d="M5 15l4 4h10v-10l-4-4" />
           </svg>
@@ -705,7 +711,7 @@ export default function Home() {
 
         {/* Hover tooltip */}
         <div className="pointer-events-none absolute right-0 mr-1 -translate-y-2 hidden group-hover:block">
-          <div className="px-2 py-1 text-[10px] rounded bg-black/70 text-white shadow whitespace-nowrap">
+          <div className="px-2 py-1 -translate-y-12 text-[10px] rounded bg-black/70 text-white shadow whitespace-nowrap">
             2D in a 3D World
           </div>
         </div>
