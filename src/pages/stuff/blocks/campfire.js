@@ -2,76 +2,115 @@
 export default {
   id: 'campfire',
   name: 'Campfire',
-  texture: '/blocks/campfire.png', // ✅ not /public/blocks/ — public folder is implicit
+
+  // Sprites
+  fireTexture: '/blocks/campfire_fire.png',  // 4 frames vertically (16x16 each)
+  baseTexture: '/blocks/campfire_base.png',  // static 16x16
+
   width: 16,
   height: 16,
   solid: true,
-  lightLevel: 0.8,
-  animationSpeed: 0.05,
-  flickerRange: 0.2,
-  collisionBox: {
-    x: 4,
-    y: 8,
-    w: 8,
-    h: 8,
-  },
 
+  lightLevel: 0.8,
+  animationSpeed: 6,      // frames per second
+  flickerRange: 0.25,
+
+  collisionBox: { x: 4, y: 8, w: 8, h: 8 },
+
+  recipe: {
+    requires: [{ id: 'stone', count: 2 }],
+    time: 1,
+  },
 
   onInteract(player, world) {
-    console.log(`${player.name || 'Player'} warms up by the fire 🔥`);
     if (world?.dialogueRef) {
-      world.dialogueRef.current = { text: 'The fire crackles softly...', frame: 0, duration: 120 };
+      world.dialogueRef.current = {
+        text: "The fire crackles softly...",
+        frame: 0,
+        duration: 120
+      };
     }
   },
 
-  draw(ctx, x = 0, y = 0, scale = 1, timeOfDay = 0) {
-    // lazy-load the sprite only once
-    if (!this._img) {
-      this._img = new Image();
-      this._img.src = this.texture; // ✅ guaranteed to exist now
-      this._img.onload = () => console.log('✅ Campfire texture loaded');
-      this._img.onerror = () => console.warn('⚠️ Campfire texture failed to load:', this.texture);
+  ensureImages() {
+    if (!this._baseImg) {
+      this._baseImg = new Image();
+      this._baseImg.src = this.baseTexture;
     }
+    if (!this._fireImg) {
+      this._fireImg = new Image();
+      this._fireImg.src = this.fireTexture;
+    }
+  },
 
-    // Wait until loaded before drawing
-    if (!this._img.complete || this._img.naturalWidth === 0) return;
+  canPlace(worldObjects, x, y, TILE_SIZE) {
+    const minDist = 5 * TILE_SIZE;     // 5 tiles
+    const minDistSq = minDist * minDist;
 
-    const safeX = Number.isFinite(x) ? x : 0;
-    const safeY = Number.isFinite(y) ? y : 0;
-    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-    const size = (this.width || 16) * safeScale;
-
-    // Flickering effect
-    const baseAlpha = 0.8;
-    const flicker =
-      baseAlpha + Math.sin(Date.now() * this.animationSpeed) * (this.flickerRange || 0.2);
-
-    ctx.save();
-    ctx.globalAlpha = Math.max(0.3, Math.min(1, flicker));
-    ctx.drawImage(this._img, safeX, safeY, size, size);
-    ctx.restore();
-
-    // Nighttime glow
-    if (timeOfDay >= 0.7 || timeOfDay <= 0.3) {
-      const glowRadius = Math.max(10, 50 * safeScale);
-      const gx = safeX + size / 2;
-      const gy = safeY + size / 2;
-
-      if (
-        Number.isFinite(gx) &&
-        Number.isFinite(gy) &&
-        Number.isFinite(glowRadius) &&
-        glowRadius > 0
-      ) {
-        const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, glowRadius);
-        grad.addColorStop(0, 'rgba(255, 180, 100, 0.3)');
-        grad.addColorStop(1, 'rgba(255, 180, 100, 0)');
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = grad;
-        ctx.fillRect(gx - glowRadius, gy - glowRadius, glowRadius * 2, glowRadius * 2);
-        ctx.restore();
+    for (const obj of worldObjects) {
+      if (obj.id === 'campfire') {
+        const dx = obj.x - x;
+        const dy = obj.y - y;
+        const distSq = dx*dx + dy*dy;
+        if (distSq < minDistSq) return false;
       }
     }
+
+    return true;
   },
+
+  draw(ctx, worldX, worldY, scale, dayNight, worldObjects, camX, camY) {
+    this.ensureImages();
+    if (!this._baseImg.complete || !this._fireImg.complete) return;
+
+    // Convert world → screen
+    const dx = Math.round((worldX - camX) * scale);
+    const dy = Math.round((worldY - camY) * scale);
+    const size = this.width * scale;
+
+    // ---------------------------
+    //   1. Draw BASE (no flicker)
+    // ---------------------------
+    ctx.drawImage(this._baseImg, dx, dy, size, size);
+    const frames = 4;
+    const frame = Math.floor((performance.now() / 1000) * this.animationSpeed) % frames;
+
+    const sy = frame * 16; // crop the correct vertical frame
+
+    // Fire flicker (ONLY fire, NOT base)
+    const alpha =
+      0.9 + Math.sin(performance.now() * 0.01) * this.flickerRange;
+    const fireSize = size * 0.75
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    ctx.drawImage(this._fireImg,
+      0, sy,      // src
+      16, 16,     // src size
+      dx + 6, dy - 4,     // dest
+      fireSize, fireSize  // <-- THIS IS CORRECT
+    );
+
+    ctx.restore();
+
+    // ---------------------------
+    //   3. Glow (optional)
+    // ---------------------------
+    const glowRadius = 55 * scale;
+    const gx = dx + size / 2;
+    const gy = dy + size / 2;
+
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+
+    const grad = ctx.createRadialGradient(gx, gy, 0, gx, gy, glowRadius);
+    grad.addColorStop(0, "rgba(255,170,80,0.35)");
+    grad.addColorStop(1, "rgba(255,170,80,0)");
+
+    ctx.fillStyle = grad;
+    ctx.fillRect(gx - glowRadius, gy - glowRadius, glowRadius * 2, glowRadius * 2);
+
+    ctx.restore();
+  }
 };

@@ -1,6 +1,4 @@
 // stuff/ui/craftingMenu.js
-// Robust crafting menu system that dynamically loads block recipes
-
 import { getAllBlockRecipes } from '../blocks/blocks.js';
 
 export class CraftingMenu {
@@ -8,11 +6,22 @@ export class CraftingMenu {
     this.open = false;
     this.hoveredIndex = -1;
     this.recipes = [];
+    this._imageCache = {}; // cache textures
   }
 
   /** Loads all recipes from registered blocks */
   loadRecipes() {
-    this.recipes = getAllBlockRecipes();
+    const defs = getAllBlockRecipes();
+
+    // Convert block recipe → crafting menu recipe format
+    this.recipes = defs.map(r => ({
+      id: r.id,                      // block id
+      name: r.name || r.id,
+      texture: r.texture,
+      ingredients: r.requires,       // <-- blocks use "requires"
+      output: { id: r.id, count: 1 } // crafting produces ONE of that block
+    }));
+
     console.log(`[CraftingMenu] Loaded ${this.recipes.length} recipes.`);
   }
 
@@ -20,53 +29,69 @@ export class CraftingMenu {
     this.open = !this.open;
   }
 
+  /** helper: cached image loading */
+  getImage(src) {
+    if (!src) return null;
+    if (!this._imageCache[src]) {
+      const img = new Image();
+      img.src = src;
+      this._imageCache[src] = img;
+    }
+    return this._imageCache[src];
+  }
+
   draw(ctx, VIEW_W, VIEW_H) {
     if (!this.open) return;
 
     const menuW = 320;
-    const menuH = 240;
+    const menuH = 260;
     const x = (VIEW_W - menuW) / 2;
     const y = (VIEW_H - menuH) / 2;
 
-    // --- background ---
+    // background
     ctx.save();
     ctx.globalAlpha = 0.9;
     ctx.fillStyle = '#111';
     ctx.fillRect(x, y, menuW, menuH);
-    ctx.strokeStyle = '#999';
+    ctx.strokeStyle = '#aaa';
     ctx.lineWidth = 2;
     ctx.strokeRect(x, y, menuW, menuH);
     ctx.restore();
 
-    ctx.font = '16px monospace';
+    ctx.font = '18px monospace';
     ctx.fillStyle = '#fff';
-    ctx.fillText('Crafting Menu', x + 16, y + 20);
+    ctx.fillText('Crafting Menu', x + 85, y + 28);
 
-    // --- recipes ---
     const startY = y + 50;
     const slotH = 50;
 
     this.recipes.forEach((recipe, i) => {
       const ry = startY + i * slotH;
-      ctx.fillStyle = i === this.hoveredIndex ? '#333' : '#222';
-      ctx.fillRect(x + 16, ry, menuW - 32, slotH - 8);
 
-      if (recipe.texture) {
-        const img = new Image();
-        img.src = recipe.texture;
-        ctx.drawImage(img, x + 24, ry + 8, 32, 32);
+      // highlight if hovered
+      ctx.fillStyle = i === this.hoveredIndex ? '#333' : '#222';
+      ctx.fillRect(x + 12, ry, menuW - 24, slotH - 6);
+
+      // icon
+      const img = this.getImage(recipe.texture);
+      if (img?.complete && img.naturalWidth > 0) {
+        ctx.drawImage(img, x + 20, ry + 8, 32, 32);
+      } else {
+        ctx.fillStyle = '#555';
+        ctx.fillRect(x + 20, ry + 8, 32, 32);
       }
 
+      // name
       ctx.fillStyle = '#fff';
-      ctx.fillText(recipe.name || recipe.id, x + 70, ry + 24);
+      ctx.fillText(recipe.name, x + 65, ry + 28);
 
-      // ingredient list
+      // ingredients
       if (Array.isArray(recipe.ingredients)) {
         ctx.fillStyle = '#aaa';
-        const ingText = recipe.ingredients
-          .map(r => `${r.count}x ${r.id}`)
+        const txt = recipe.ingredients
+          .map(i => `${i.count}× ${i.id}`)
           .join(', ');
-        ctx.fillText(ingText, x + 180, ry + 24);
+        ctx.fillText(txt, x + 160, ry + 28);
       }
     });
   }
@@ -74,7 +99,7 @@ export class CraftingMenu {
   handleMouseMove(mx, my, VIEW_W, VIEW_H) {
     if (!this.open) return;
     const menuW = 320;
-    const menuH = 240;
+    const menuH = 260;
     const x = (VIEW_W - menuW) / 2;
     const y = (VIEW_H - menuH) / 2;
     const startY = y + 50;
@@ -83,84 +108,81 @@ export class CraftingMenu {
     this.hoveredIndex = -1;
     for (let i = 0; i < this.recipes.length; i++) {
       const ry = startY + i * slotH;
-      if (mx >= x + 16 && mx <= x + menuW - 16 && my >= ry && my <= ry + slotH - 8) {
+      if (mx >= x + 12 && mx <= x + menuW - 12 &&
+          my >= ry && my <= ry + slotH - 6) {
         this.hoveredIndex = i;
         break;
       }
     }
   }
 
-  /** Called when a recipe is clicked; consumes ingredients & adds output */
+  /** inventorySlots: array of { itemId, count } */
   handleMouseClick(inventorySlots) {
     if (!this.open || this.hoveredIndex === -1) return null;
-    const recipe = this.recipes[this.hoveredIndex];
-    if (!Array.isArray(inventorySlots)) {
-      console.error('CraftingMenu.handleMouseClick expected an array of slots.');
-      return null;
-    }
 
-    // --- check materials ---
-    const canCraft = recipe.ingredients?.every(ing => {
+    const recipe = this.recipes[this.hoveredIndex];
+    const ingredients = recipe.ingredients || [];
+
+    // ---- check if inventory has needed items ----
+    const canCraft = ingredients.every(ing => {
       let need = ing.count;
       for (const slot of inventorySlots) {
-        if (!slot || !slot.itemId) continue;
-        if (slot.itemId === ing.id) {
-          need -= slot.count ?? 1;
-          if (need <= 0) break;
+        if (slot?.itemId === ing.id) {
+          need -= slot.count;
+          if (need <= 0) return true;
         }
       }
       return need <= 0;
     });
 
     if (!canCraft) {
-      console.log('Not enough materials!');
+      console.log('❌ Not enough materials');
       return null;
     }
 
-    // --- consume items ---
-    recipe.ingredients.forEach(ing => {
+    // ---- consume required items ----
+    ingredients.forEach(ing => {
       let need = ing.count;
       for (const slot of inventorySlots) {
-        if (!slot || !slot.itemId || slot.itemId !== ing.id) continue;
-        const take = Math.min(need, slot.count ?? 1);
-        slot.count -= take;
-        need -= take;
-        if (slot.count <= 0) {
-          slot.itemId = null;
-          slot.item = null;
+        if (slot?.itemId === ing.id) {
+          const take = Math.min(slot.count, need);
+          slot.count -= take;
+          need -= take;
+
+          if (slot.count <= 0) {
+            slot.itemId = null;
+            slot.count = 0;
+          }
+          if (need <= 0) break;
         }
-        if (need <= 0) break;
       }
     });
 
-    // --- add crafted output ---
-    const { id: outId, count: outCount } = recipe.output || {};
-    if (!outId) return null;
+    // ---- add crafted item ----
+    const result = recipe.output;
+    let remaining = result.count;
 
-    let remaining = outCount ?? 1;
-
-    // stack with existing
+    // stack into existing slots
     for (const slot of inventorySlots) {
-      if (slot && slot.itemId === outId) {
-        slot.count = (slot.count ?? 0) + remaining;
+      if (slot.itemId === result.id) {
+        slot.count += remaining;
         remaining = 0;
         break;
       }
     }
 
-    // add to empty slot
+    // place in empty slot
     if (remaining > 0) {
-      const empty = inventorySlots.find(s => s && !s.itemId);
+      const empty = inventorySlots.find(s => !s.itemId);
       if (empty) {
-        empty.itemId = outId;
+        empty.itemId = result.id;
         empty.count = remaining;
-        empty.item = null;
       } else {
-        console.warn('Inventory full! Crafted item dropped.');
+        console.warn('Inventory full — dropping crafted item');
       }
     }
 
-    console.log(`Crafted: ${recipe.name || outId}`);
-    return outId;
+    console.log(`✅ Crafted: ${recipe.name}`);
+    return result.id;
   }
 }

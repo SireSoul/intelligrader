@@ -2,6 +2,7 @@
 // Centralized block registry for all interactive world blocks.
 
 import Campfire from './campfire.js';
+import Fence from './fence.js';
 
 const blockRegistry = {};
 
@@ -36,7 +37,7 @@ export function getAllBlocks() {
 /** Load all blocks (manual import for Next.js instead of require.context) */
 export async function loadAllBlocks() {
   // manually import all block files — add new ones here as you create them
-  const blockModules = [Campfire];
+  const blockModules = [Campfire, Fence];
 
   for (const mod of blockModules) {
     if (mod && mod.id) registerBlock(mod);
@@ -95,4 +96,37 @@ export function drawBlocks(ctx, blocks, camX, camY, scale) {
   }
 }
 
-export const allBlocks = [Campfire];
+function startTextureUpdater() {
+  if (textureUpdateTimer) clearInterval(textureUpdateTimer);
+
+  textureUpdateTimer = setInterval(() => {
+    for (const def of Object.values(blockRegistry)) {
+      if (!def.texture) continue;
+
+      // Skip if custom draw() handles animation
+      if (typeof def.draw === 'function' && def.id !== 'campfire') continue;
+
+      // Reload broken or unloaded images
+      if (!def._img || !def._img.src || def._img.naturalWidth === 0) {
+        def._img = new Image();
+        def._img.src = def.texture;
+        continue;
+      }
+
+      // For animated textures: cycle frames via timestamp (optional)
+      if (def.frames && def.frames.length > 1) {
+        const frame = Math.floor(Date.now() / (def.frameDelay || 150)) % def.frames.length;
+        def._img.src = def.frames[frame];
+      }
+    }
+  }, 500); // updates every 0.5s — safe for canvas
+}
+
+export function stopTextureUpdater() {
+  if (textureUpdateTimer) {
+    clearInterval(textureUpdateTimer);
+    textureUpdateTimer = null;
+  }
+}
+
+export const allBlocks = [Campfire, Fence];

@@ -1,158 +1,195 @@
 // stuff/dayNight.js
-// Fully self-contained day/night cycle for Canvas 2D (no window refs in module).
+// Cinematic day/night with vignette + real light holes (GIF-style).
 
-// Small helpers
-function clamp01(v) { return Math.max(0, Math.min(1, v)); }
-function mix(a, b, t) { return a + (b - a) * t; }
+const clamp01 = v => Math.max(0, Math.min(1, v));
+const mix = (a, b, t) => a + (b - a) * t;
+const easeInOut = t => 0.5 - 0.5 * Math.cos(Math.PI * clamp01(t)); // smoothstep-ish
 
-/**
- * Create a day/night controller.
- * @param {object} opts
- *  - dayLengthSec: seconds per full cycle
- *  - initialTime:  0..1 (0=sunrise, .25=noon, .5=sunset, .75=midnight)
- *  - starsCount:   number of stars to render at night
- */
 export function createDayNight({
   dayLengthSec = 180,
-  initialTime = 0.20,
+  initialTime = 0.20,   // 0..1 (0 midnight, .25 dawn, .5 noon, .75 dusk)
   starsCount = 220,
 } = {}) {
-  let t = ((initialTime % 1) + 1) % 1;     // time of day [0..1)
-  let stars = [];
-  let lastW = 0, lastH = 0;
+  let t = ((initialTime % 1) + 1) % 1;
 
+  // offscreen darkness buffer (we draw/erase into this, then blit)
+  let buf, bctx, bw = 0, bh = 0;
+
+  // star field
+  let stars = [];
   function regenStars(w, h) {
     stars = Array.from({ length: starsCount }, () => ({
       x: Math.random() * w,
       y: Math.random() * h,
       r: 0.6 + Math.random() * 1.4,
-      a: 0.5 + Math.random() * 0.5,
-      tw: 0.5 + Math.random() * 1.5, // twinkle speed
+      baseA: 0.35 + Math.random() * 0.4,
+      tw: 0.7 + Math.random() * 1.2,
       ph: Math.random() * Math.PI * 2,
     }));
-    lastW = w; lastH = h;
   }
 
+  function ensureBuffer(w, h) {
+    if (!buf || bw !== w || bh !== h) {
+      buf = document.createElement('canvas');
+      buf.width = bw = w;
+      buf.height = bh = h;
+      bctx = buf.getContext('2d', { alpha: true });
+      bctx.imageSmoothingEnabled = false;
+      regenStars(w, h);
+    }
+  }
+
+  // daylight model (nonlinear, warm at edges of day)
   function getCycle() {
-    // t = 0 → midnight, 0.25 → 6 AM, 0.5 → noon, 0.75 → 6 PM, 1 → next midnight
+    const sunrise = 0.22;  // ~5:15
+    const sunset  = 0.78;  // ~18:45
 
-    const sunrise = 0.15;  // 6 AM
-    const sunset = 0.95;   // 6 PM
     let dayLight = 0;
-
-    // Before sunrise → fully dark
-    if (t < sunrise) {
-      dayLight = 0;
-    }
-    // Between sunrise and sunset → cosine-based daylight arc
-    else if (t >= sunrise && t <= sunset) {
-      const mid = (sunrise + sunset) / 2; // noon
-      const phase = (t - sunrise) / (sunset - sunrise); // 0→1 within daylight
-      dayLight = Math.sin(phase * Math.PI); // smooth sunrise→sunset (0→1→0)
-    }
-    // After sunset → night
-    else {
+    if (t >= sunrise && t <= sunset) {
+      // 0..1 across daytime, sine arc → power for flatter mid-day
+      const p = (t - sunrise) / (sunset - sunrise);
+      dayLight = Math.pow(Math.sin(p * Math.PI), 0.85);
+    } else {
       dayLight = 0;
     }
 
     const darkness = 1 - dayLight;
 
-    // Warm tint only near sunrise/sunset
-    const warmBand = 0.08;
+    // warm band near sunrise/sunset
+    const warmBand = 0.09;
     const dawnWarm = clamp01(1 - Math.abs(t - sunrise) / warmBand);
     const duskWarm = clamp01(1 - Math.abs(t - sunset) / warmBand);
-    const warm = Math.max(dawnWarm, duskWarm) * (0.6 + 0.4 * dayLight);
+    const warm = Math.max(dawnWarm, duskWarm) * (0.7 + 0.3 * dayLight);
 
     return { t, dayLight, darkness, warm };
   }
 
-  function update(dtSec) {
-    if (!Number.isFinite(dtSec) || dtSec <= 0) dtSec = 1 / 60;
+  // frames → time-of-day progression. We accept frames OR seconds.
+  function update(dtSec = 1 / 60) {
     t = (t + dtSec / dayLengthSec) % 1;
   }
 
-  /**
-   * Render all day/night effects on top of the world & entities (before HUD).
-   * (Scene arg kept for API compatibility; not used since player glow was removed.)
-   * scene = { player, camX, camY, scale }
-   */
-  function render(ctx, w, h, scene, lights = []) {
-    if (w !== lastW || h !== lastH || stars.length === 0) regenStars(w, h);
-    const { dayLight, darkness, warm } = getCycle();
-
-    // 1️⃣ Draw ambient dark overlay
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    const g = ctx.createLinearGradient(0, 0, 0, h);
-    const topA = mix(0.05, 0.65, darkness);
-    const botA = mix(0.10, 0.75, darkness);
-    g.addColorStop(0, `rgba(0, 8, 22, ${topA})`);
-    g.addColorStop(1, `rgba(0, 12, 28, ${botA})`);
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
-
-    // 2️⃣ Warm sunset/sunrise tint
-    if (warm > 0.01) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'screen';
-      const gw = ctx.createLinearGradient(0, 0, 0, h);
-      const topWarm = 0.3 * warm * clamp01(1 - darkness);
-      const botWarm = 0.1 * warm * clamp01(1 - darkness);
-      gw.addColorStop(0, `rgba(255, 185, 95, ${topWarm})`);
-      gw.addColorStop(1, `rgba(255, 130, 70, ${botWarm})`);
-      ctx.fillStyle = gw;
-      ctx.fillRect(0, 0, w, h);
-      ctx.restore();
-    }
-
-    // 3️⃣ Stars (faint)
-    if (darkness > 0.25) {
-      ctx.save();
-      const k = (darkness - 0.25) / 0.75;
-      ctx.globalAlpha = clamp01(k) * 0.9;
-      ctx.fillStyle = '#fff';
-      ctx.beginPath();
-      const now = performance.now() / 1000;
-      for (const s of stars) {
-        const tw = 0.6 + 0.4 * Math.sin(now * s.tw + s.ph);
-        const a = s.a * (0.4 + 0.6 * tw);
-        ctx.globalAlpha = clamp01(k) * a;
-        ctx.rect(s.x, s.y, s.r, s.r);
-      }
-      ctx.fill();
-      ctx.restore();
-    }
-
-    // 4️⃣ Light sources — from campfires or lamps
-    if (darkness > 0.2 && lights?.length) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'lighter';
-      for (const light of lights) {
-        const { x, y, radius = 80, intensity = 3.0 } = light;
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, radius);
-        grad.addColorStop(0, `rgba(255, 200, 120, ${0.65 * intensity * darkness})`);
-        grad.addColorStop(1, 'rgba(255, 200, 120, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(x - radius, y - radius, radius * 2, radius * 2);
-      }
-      ctx.restore();
-    }
-
-    // 5️⃣ Subtle vignette
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    const vg = ctx.createRadialGradient(w / 2, h / 2, w / 3, w / 2, h / 2, w);
-    vg.addColorStop(0, 'rgba(0,0,0,0)');
-    vg.addColorStop(1, `rgba(0,0,0,${mix(0.1, 0.6, darkness)})`);
-    ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, w, h);
-    ctx.restore();
+  function skipMinutes(minutes) {
+    t = (t + (minutes / (24 * 60))) % 1;
   }
 
-  function skipMinutes(minutes) {
-    const delta = minutes / (24 * 60); // minutes -> day fraction
-    t = (t + delta) % 1;
+  /**
+   * Render: draw stars, darkness + tint + vignette, then carve light holes.
+   * lights = [{x,y,radius,intensity}]
+   */
+  function render(ctx, w, h, _scene, lights = []) {
+    ensureBuffer(w, h);
+    const cycle = getCycle();
+    const { darkness, warm } = cycle;
+
+    // 0) Stars (under the darkness so they dim naturally)
+    if (darkness > 0.35) {
+      const k = clamp01((darkness - 0.35) / 0.65); // grow in late dusk
+      ctx.save();
+      ctx.globalAlpha = 1 * k;
+      ctx.fillStyle = '#fff';
+      const now = performance.now() / 1000;
+      for (const s of stars) {
+        const a = s.baseA * (0.5 + 0.5 * Math.sin(now * s.tw + s.ph));
+        ctx.globalAlpha = a * 0.9 * k;
+        ctx.fillRect(s.x, s.y, s.r, s.r);
+      }
+      ctx.restore();
+    }
+
+    // 1) Build darkness buffer (deep navy, multiply later)
+    bctx.clearRect(0, 0, bw, bh);
+
+    // ambient navy gradient (top a bit brighter)
+    const ambTop = `rgba(20, 40, 70, ${mix(0.15, 0.75, darkness)})`;
+    const ambBot = `rgba(10, 20, 45, ${mix(0.20, 0.85, darkness)})`;
+    const g = bctx.createLinearGradient(0, 0, 0, bh);
+    g.addColorStop(0, ambTop);
+    g.addColorStop(1, ambBot);
+    bctx.fillStyle = g;
+    bctx.fillRect(0, 0, bw, bh);
+
+    // warm dusk/dawn tint (screened on top of navy)
+    if (warm > 0.01) {
+      bctx.save();
+      bctx.globalCompositeOperation = 'screen';
+      const gw = bctx.createLinearGradient(0, 0, 0, bh);
+      const topWarm = 0.30 * warm * (1 - darkness);
+      const botWarm = 0.12 * warm * (1 - darkness);
+      gw.addColorStop(0, `rgba(255,180,95,${topWarm})`);
+      gw.addColorStop(1, `rgba(240,120,70,${botWarm})`);
+      bctx.fillStyle = gw;
+      bctx.fillRect(0, 0, bw, bh);
+      bctx.restore();
+    }
+
+    // 2) Vignette that tightens by night (seeping from edges)
+    // radius shrinks with darkness; softness grows slightly
+    const diag = Math.hypot(bw, bh);
+    const baseR = mix(diag * 0.75, diag * 0.38, easeInOut(darkness));
+    const soft  = mix(diag * 0.22, diag * 0.34, darkness);
+    const cx = bw * 0.5, cy = bh * 0.55; // centered slightly low (feels nicer)
+    const vg = bctx.createRadialGradient(cx, cy, baseR, cx, cy, baseR + soft);
+    // center: 0 dark, edge: full dark
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, 'rgba(0,0,0,1)');
+    bctx.save();
+    bctx.globalCompositeOperation = 'multiply';
+    bctx.fillStyle = vg;
+    bctx.globalAlpha = mix(0.2, 0.7, Math.pow(darkness, 0.8));
+    bctx.fillRect(0, 0, bw, bh);
+    bctx.restore();
+
+    // 3) Carve light holes (remove darkness) + subtle amber halo
+    bctx.save();
+    bctx.globalCompositeOperation = 'destination-out';
+    const now = performance.now() / 1000;
+    for (const L of lights) {
+      const x = L.x, y = L.y;
+      const r = (L.radius || 120) * 1.3; // 🔆 slightly larger
+      const intensity = L.intensity ?? 1.0;
+
+      // soft, slow flicker
+      const flickSpeed = 0.9 + (L.seed || 0) * 0.1;
+      const flick = 0.96 + 0.04 * Math.sin(now * flickSpeed + (L.seed || 0));
+
+      // smoother falloff (more gradual)
+      const innerR = r * 0.25 * flick;
+      const outerR = r * flick;
+
+      const cut = bctx.createRadialGradient(x, y, innerR, x, y, outerR);
+      cut.addColorStop(0, `rgba(0,0,0,${0.85 * intensity})`);
+      cut.addColorStop(0.5, `rgba(0,0,0,${0.4 * intensity})`);
+      cut.addColorStop(1, 'rgba(0,0,0,0)');
+      bctx.fillStyle = cut;
+      bctx.beginPath();
+      bctx.arc(x, y, outerR, 0, Math.PI * 2);
+      bctx.fill();
+    }
+    bctx.restore();
+
+    // 🔥 subtle warm halo (additive on main ctx)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const L of lights) {
+      const x = L.x, y = L.y;
+      const r = (L.radius || 120) * 1.4;
+      const intensity = (L.intensity ?? 1.0) * 0.8;
+      const glow = ctx.createRadialGradient(x, y, 0, x, y, r);
+      glow.addColorStop(0, `rgba(255, 200, 120, ${0.3 * intensity})`);
+      glow.addColorStop(0.4, `rgba(255, 160, 100, ${0.15 * intensity})`);
+      glow.addColorStop(1, 'rgba(255, 120, 60, 0)');
+      ctx.fillStyle = glow;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    ctx.restore();
+
+    // 4) Composite darkness buffer over the scene
+    ctx.save();
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(buf, 0, 0);
+    ctx.restore();
   }
 
   return { update, render, getCycle, skipMinutes };

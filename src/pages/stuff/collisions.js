@@ -9,6 +9,7 @@ export function collides(a, b) {
 
 export function checkTreeCollisions(px, py, playerSize, trees) {
   for (const t of trees) {
+    if (!t.collisionBoxes) continue;
     for (const box of t.collisionBoxes) {
       const bx = t.x + box.x;
       const by = t.y + box.y;
@@ -21,22 +22,42 @@ export function checkTreeCollisions(px, py, playerSize, trees) {
 }
 
 export function checkBlockCollisions(px, py, playerSize, worldObjects, tileSize = 8) {
-  for (const obj of worldObjects) {
-    if (!obj.def?.solid) continue;
+  const half = playerSize / 2;
+  const playerBox = {
+    x: px - half,
+    y: py - half,
+    w: playerSize,
+    h: playerSize,
+  };
 
-    const bx = obj.x;
-    const by = obj.y;
-    const bw = obj.def.width || tileSize;
-    const bh = obj.def.height || tileSize;
+  for (const obj of worldObjects) {
+    const def = obj.def;
+    if (!def?.solid) continue;
+
+    let bx, by, bw, bh;
+
+    // 🔹 Use custom collision box if block defines one (e.g., fence)
+    if (typeof def.getCollisionBox === 'function') {
+      const box = def.getCollisionBox(obj.x, obj.y);
+      if (!box) continue;
+      ({ x: bx, y: by, w: bw, h: bh } = box);
+    } else {
+      // fallback: full tile
+      bx = obj.x;
+      by = obj.y;
+      bw = def.width || tileSize;
+      bh = def.height || tileSize;
+    }
 
     if (
-      px + playerSize > bx &&
-      px - playerSize < bx + bw &&
-      py + playerSize > by &&
-      py - playerSize < by + bh
+      playerBox.x < bx + bw &&
+      playerBox.x + playerBox.w > bx &&
+      playerBox.y < by + bh &&
+      playerBox.y + playerBox.h > by
     ) {
       return true;
     }
   }
+
   return false;
 }

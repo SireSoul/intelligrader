@@ -54,7 +54,7 @@ export class DroppedItem {
 
     const sx = Math.round((this.x - camX) * scale);
     const sy = Math.round((this.y - camY) * scale);
-    const size = Math.round(4 * scale);
+    const size = Math.round(8 * scale);
     const screenZ = this.z * scale;
 
     // shadow

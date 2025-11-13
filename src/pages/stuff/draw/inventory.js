@@ -28,6 +28,11 @@ export class Inventory {
     this.onHotbarUpdate = onHotbarUpdate;
   }
 
+  // --- Core fix: ensure every slot is safe ---
+  normalizeSlot(s) {
+    return s || { id: null, count: 0 };
+  }
+
   getMaxStackFor(id) {
     const item = itemsData.find(i => i.id === id);
     return item?.maxStack ?? 999; // fallback if not defined
@@ -37,15 +42,22 @@ export class Inventory {
 
   // --- bottom row → middle → top (for auto-add & hotbar mirroring)
   bottomRowStart() { return (this.rows - 1) * this.cols; }
+
   getHotbarItems() {
     const start = this.bottomRowStart();
-    return this.slots.slice(start, start + this.cols);
+    return this.slots
+      .slice(start, start + this.cols)
+      .map(s => this.normalizeSlot(s));
   }
+
   syncHotbar() {
     if (typeof this.onHotbarUpdate === 'function') {
-      this.onHotbarUpdate(this.getHotbarItems());
+      this.onHotbarUpdate(
+        this.getHotbarItems().map(s => this.normalizeSlot(s))
+      );
     }
   }
+
   *slotOrderBottomToTop() {
     for (let r = this.rows - 1; r >= 0; r--) {
       for (let c = 0; c < this.cols; c++) {
@@ -53,6 +65,7 @@ export class Inventory {
       }
     }
   }
+
   // Prefer stacking; else first empty (bottom→top)
   addItem(item) {
     const id = item.id;
@@ -171,8 +184,7 @@ export class Inventory {
       return;
     }
 
-
-    // Not holding anything → pick up if slot has item
+    // pick up if slot has item
     const slot = this.slots[idx];
     if (slot) {
       this.heldItem = slot;
@@ -223,7 +235,7 @@ export class Inventory {
 
       // Highlight: hovered & source slot
       if (i === this.dragIndex) {
-        ctx.strokeStyle = 'rgba(255,215,0,0.95)'; // gold for the picked slot
+        ctx.strokeStyle = 'rgba(255,215,0,0.95)'; // gold
         ctx.lineWidth = 2;
         ctx.strokeRect(sx + 1, sy + 1, this.SLOT_SIZE - 2, this.SLOT_SIZE - 2);
       } else if (i === this.hoveredSlot) {
@@ -238,7 +250,7 @@ export class Inventory {
 
       const slot = this.slots[i];
       if (slot) {
-        const img = itemSprites?.[slot.id] || itemSprites?.[slot.itemId];
+        const img = itemSprites?.[slot.id];
         if (img && img.complete && img.naturalWidth > 0) {
           ctx.drawImage(img, sx + 8, sy + 8, 32, 32);
         }
@@ -258,11 +270,11 @@ export class Inventory {
     // Title
     ctx.font = '20px monospace';
     ctx.fillStyle = '#fff';
-    ctx.fillText('Inventory', panelX + 10, panelY + 20);
+    ctx.fillText('Inventory', panelX + 75, panelY + 20);
 
     // Held item ghost (follows cursor)
     if (this.heldItem) {
-      const img = itemSprites?.[this.heldItem.id] || itemSprites?.[this.heldItem.itemId];
+      const img = itemSprites?.[this.heldItem.id];
       const mx = this._mouseX, my = this._mouseY;
       if (img && img.complete && img.naturalWidth > 0) {
         ctx.save();
@@ -273,12 +285,12 @@ export class Inventory {
       const count = this.heldItem.count ?? 0;
       if (count > 1) {
         ctx.font = '12px monospace';
-          ctx.fillStyle = '#fff';
-          ctx.textAlign = 'right';
-          ctx.textBaseline = 'alphabetic';
-          ctx.fillText(count, mx + 18, my + 18);
-          ctx.textAlign = 'start';
-          ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(count, mx + 18, my + 18);
+        ctx.textAlign = 'start';
+        ctx.textBaseline = 'alphabetic';
       }
     }
   }

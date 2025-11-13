@@ -48,18 +48,6 @@ export default function Home() {
   const numberOfBlocks = 25;
   const [vh, setVh] = useState(0);
 
-  // --- Typing reactivity for Techno mode ---
-  const [intensity, setIntensity] = useState(1);
-  const intensityTimer = useRef(null);
-  function bumpIntensity(value) {
-    setIntensity(value); // temporary "boost" multiplier
-    if (intensityTimer.current) {
-      clearTimeout(intensityTimer.current);
-    }
-    intensityTimer.current = setTimeout(() => setIntensity(1), 1000); // back to calm
-  }
-
-
   // Responsive viewport height for accurate mirroring
   useEffect(() => {
     const update = () => setVh(window.innerHeight);
@@ -277,7 +265,6 @@ export default function Home() {
               <button onClick={() => setActiveBgEffect(null)} className={`px-4 py-2 rounded-lg border ${activeBgEffect === null ? "bg-purple-600 text-white" : "bg-gray-200 text-gray-800"}`}>Normal</button>
               <button onClick={() => setActiveBgEffect('reflective')} className={`px-4 py-2 rounded-lg border ${activeBgEffect === 'reflective' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}>Reflective Glass</button>
               <button onClick={() => setActiveBgEffect('waves')} className={`px-4 py-2 rounded-lg border ${activeBgEffect === 'waves' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}>Waves</button>
-              <button onClick={() => setActiveBgEffect('techno')} className={`px-4 py-2 rounded-lg border ${activeBgEffect === 'techno' ? 'bg-purple-600 text-white' : 'bg-gray-200 text-gray-800'}`}>Techno</button>
             </div>
             <button className="mt-4 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors" onClick={toggleBgSettings}>Close</button>
           </motion.div>
@@ -497,120 +484,9 @@ export default function Home() {
             </>
           )}
 
-          {activeBgEffect === "techno" && (
-          <>
-            {/* --- BLACK BACKGROUND --- */}
-            <div className="fixed inset-0 bg-black z-0" />
-            {/* --- PULSING GRID --- */}
-            <div
-              className="fixed inset-0 pointer-events-none z-[1]"
-              style={{
-                backgroundImage: `
-                  radial-gradient(circle at 30% 40%, rgba(255,255,255,0.04) 0%, transparent 60%)
-                `,
-                backgroundSize: "100% 100%",
-              }}
-            >
-              {[...Array(2)].map((_, i) => (
-                <motion.div
-                  key={i}
-                  className="absolute inset-0"
-                  style={{
-                    backgroundImage:
-                      i === 0
-                        ? "linear-gradient(90deg, rgba(255,255,255,0.08) 1px, transparent 1px)"
-                        : "linear-gradient(0deg, rgba(255,255,255,0.08) 1px, transparent 1px)",
-                    backgroundSize: "40px 40px",
-                    mixBlendMode: "screen",
-                  }}
-                  animate={{
-                    opacity: [0.2, 0.5, 0.2],
-                    filter: [
-                      "drop-shadow(0 0 1px rgba(255,255,255,0.2))",
-                      "drop-shadow(0 0 6px rgba(168,85,247,0.8))",
-                      "drop-shadow(0 0 1px rgba(255,255,255,0.2))",
-                    ],
-                  }}
-                  transition={{
-                    duration: 0.8 / intensity + Math.random(),
-                    repeat: Infinity,
-                    repeatType: "mirror",
-                    ease: "easeInOut",
-                    delay: Math.random(),
-                  }}
-                />
-              ))}
-            </div>
-
-            {/* --- CENTER EXPLOSIVE BEAT --- */}
-            <div className="fixed inset-0 flex items-center justify-center pointer-events-none z-[2]">
-              {/* Core explosion pulse */}
-              <motion.div
-                className="rounded-full"
-                style={{
-                  width: 180,
-                  height: 180,
-                  background: `
-                    radial-gradient(
-                      circle,
-                      rgba(168,85,247,1) 0%,
-                      rgba(168,85,247,0.4) 30%,
-                      rgba(168,85,247,0.1) 60%,
-                      rgba(168,85,247,0) 90%
-                    )
-                  `,
-                  mixBlendMode: "screen",
-                  filter: "blur(10px)",
-                }}
-                animate={{
-                  scale: [0, 2 * intensity],
-                  opacity: [0.9, 0],
-                }}
-                transition={{
-                  duration: 1.8,
-                  repeat: Infinity,
-                  ease: "easeOut",
-                  delay: 0.5
-                }}
-              />
-
-              {/* Outer shockwave ring */}
-              <motion.div
-                className="absolute rounded-full border-2 border-purple-400/80"
-                style={{
-                  width: 220,
-                  height: 220,
-                  mixBlendMode: "screen",
-                  filter: "blur(2px)",
-                }}
-                animate={{
-                  scale: [1, 9 * intensity],
-                  opacity: [0.8, 0.2],
-                  borderColor: [
-                    "rgba(168,85,247,0.8)",
-                    "rgba(255,255,255,0.9)",
-                    "rgba(168,85,247,0)",
-                  ],
-                }}
-                transition={{
-                  duration: 1.8,
-                  repeat: Infinity,
-                  ease: "easeOut",
-                  delay: 0.2,
-                }}
-              />
-            </div>
-          </>
-        )}
-
             {/* actual form card */}
             <motion.div
-              className={`relative z-[42] w-full h-full flex flex-col items-center justify-center backdrop-blur-md rounded-3xl p-8 transition-all duration-500
-                ${
-                  activeBgEffect === "techno"
-                    ? "bg-gray-black border border-gray-700 shadow-[0_0_25px_rgba(255,255,255,0.08)]"
-                    : "bg-white/0"
-                }`}
+              className={`relative z-[42] w-full h-full flex flex-col items-center justify-center backdrop-blur-md rounded-3xl p-8 transition-all duration-500 bg-white/0`}
               initial={{ clipPath: "polygon(100% 100%, 100% 100%, 100% 100%, 100% 100%)" }}
               animate={{ clipPath: "polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%)" }}
               transition={{ duration: 0.7, ease: "easeInOut" }}
@@ -634,7 +510,6 @@ export default function Home() {
                   value={input}
                   onChange={(e) => {
                     setInput(e.target.value);
-                    bumpIntensity(1.25); // triggers the visual multiplier
                   }}
                 />
                 <button
@@ -647,29 +522,6 @@ export default function Home() {
                   Grade Now
                 </button>
               </form>
-
-              {/* Animated border pulse for Techno mode */}
-              {activeBgEffect === "techno" && (
-                <motion.div
-                  className="absolute inset-0 rounded-3xl pointer-events-none border-2 border-gray-700"
-                  style={{
-                    boxShadow: "0 0 25px rgba(120,120,120,0.2)",
-                  }}
-                  animate={{
-                    opacity: [0.3, 1, 0.3],
-                    boxShadow: [
-                      "0 0 20px rgba(255,255,255,0.05)",
-                      "0 0 30px rgba(255,255,255,0.35)",
-                      "0 0 20px rgba(255,255,255,0.05)",
-                    ],
-                  }}
-                  transition={{
-                    duration: 4,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                />
-              )}
             </motion.div>
           </div>
         )}
