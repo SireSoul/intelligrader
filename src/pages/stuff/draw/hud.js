@@ -1,5 +1,5 @@
 // stuff/draw/hud.js
-// Uses real pixel bars from the character HUD image and crops them by value.
+// Brighter HUD using brightness filter on draw calls.
 
 let hudImg = null;
 let hudLoaded = false;
@@ -12,46 +12,32 @@ function ensureHUDLoaded() {
   hudImg.src = "/ui/character_panel.png";
 }
 
-/**
- * Draws a cropped bar from the HUD sprite sheet.
- *
- * @param {CanvasRenderingContext2D} ctx
- * @param {Image} img   - HUD spritesheet
- * @param {number} sx   - sprite x
- * @param {number} sy   - sprite y
- * @param {number} sw   - sprite width
- * @param {number} sh   - sprite height
- * @param {number} dx   - draw x
- * @param {number} dy   - draw y
- * @param {number} scale
- * @param {number} pct  - 0..1 (bar fill)
- */
+// --- Brightened Draw ---
+function brightnessDraw(ctx, img, sx, sy, sw, sh, dx, dy, dw, dh, brightness = 1.35) {
+  ctx.save();
+  ctx.filter = `brightness(${brightness})`;
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+  ctx.restore();
+}
+
 function drawBar(ctx, img, sx, sy, sw, sh, dx, dy, scale, pct) {
   pct = Math.max(0, Math.min(1, pct));
   const crop = sw * pct;
 
-  ctx.drawImage(
-    img,
-    sx, sy,              // src
-    crop, sh,            // src width cropped
-    dx, dy,              // dst
-    crop * scale, sh * scale
+  brightnessDraw(
+    ctx, img,
+    sx, sy,
+    crop, sh,
+    dx, dy,
+    crop * scale, sh * scale,
+    1.40 // ⬅ slightly more bright than background
   );
 }
 
-/**
- * Draws the bottom-left HUD including portrait panel & animated bars.
- *
- * @param {CanvasRenderingContext2D} ctx
- * @param {object} player - must contain hp/maxHp, stamina/maxStamina, mana/maxMana
- * @param {number} VIEW_W
- * @param {number} VIEW_H
- */
 export function drawHUD(ctx, player, VIEW_W, VIEW_H) {
   ensureHUDLoaded();
   if (!hudLoaded) return;
 
-  // === PANEL BACKGROUND SECTION ===
   const panelSX = 0;
   const panelSY = 64;
   const panelSW = 96;
@@ -60,14 +46,17 @@ export function drawHUD(ctx, player, VIEW_W, VIEW_H) {
   const scale = 3;
   const dx = 10;
   const dy = VIEW_H - panelSH * scale - 10;
-  const dw = panelSW * scale;
-  const dh = panelSH * scale;
 
-  ctx.drawImage(hudImg, panelSX, panelSY, panelSW, panelSH, dx, dy, dw, dh);
+  // --- panel background (brightened)
+  brightnessDraw(
+    ctx, hudImg,
+    panelSX, panelSY,
+    panelSW, panelSH,
+    dx, dy,
+    panelSW * scale, panelSH * scale,
+    1.32
+  );
 
-  // --------------------------
-  // BAR DRAW POSITIONS (in world space)
-  // --------------------------
   const barX = dx + 30 * scale;
   const barY = dy + 10 * scale;
   const barGap = 5 * scale;
@@ -76,14 +65,14 @@ export function drawHUD(ctx, player, VIEW_W, VIEW_H) {
   const staPct  = (player.stamina ?? 1) / (player.maxStamina ?? 1);
   const manaPct = (player.mana ?? 1) / (player.maxMana ?? 1);
 
-  // --- RED HP ---
+  // RED HP
   drawBar(ctx, hudImg, 14, 138, 51, 2, barX, barY, scale * 1.02, hpPct);
 
-  // --- GREEN STA ---
+  // GREEN STAMINA
   drawBar(ctx, hudImg, 16, 143, 40, 2,
           barX + 4, barY + barGap - 1, scale * 1.095, staPct);
 
-  // --- BLUE MANA ---
+  // BLUE MANA
   drawBar(ctx, hudImg, 15, 148, 37, 2,
           barX, barY + barGap * 2, scale * 1.05, manaPct);
 }

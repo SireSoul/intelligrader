@@ -1,19 +1,43 @@
-export function collides(a, b) {
+// =============================
+// RECTANGLE → RECTANGLE COLLISION
+// =============================
+export function rectsOverlap(a, b) {
   return !(
-    a.x + a.size / 2 < b.x ||
-    a.x - a.size / 2 > b.x + b.w ||
-    a.y + a.size / 2 < b.y ||
-    a.y - a.size / 2 > b.y + b.h
+    a.x + a.w < b.x ||
+    a.x > b.x + b.w ||
+    a.y + a.h < b.y ||
+    a.y > b.y + b.h
   );
 }
 
-export function checkTreeCollisions(px, py, playerSize, trees) {
+// Convert player center + hitbox settings into rectangle
+function getPlayerRect(px, py, hitbox) {
+  return {
+    x: px - hitbox.w / 2,
+    y: py - hitbox.h + hitbox.offY,
+    w: hitbox.w,
+    h: hitbox.h
+  };
+}
+
+// =============================
+// TREE COLLISIONS
+// =============================
+export function checkTreeCollisions(px, py, hitbox, trees) {
+  const playerRect = getPlayerRect(px, py, hitbox);
+
   for (const t of trees) {
     if (!t.collisionBoxes) continue;
+
     for (const box of t.collisionBoxes) {
-      const bx = t.x + box.x;
-      const by = t.y + box.y;
-      if (collides({ x: px, y: py, size: playerSize }, { x: bx, y: by, w: box.w, h: box.h })) {
+      const treeRect = {
+        x: t.x + box.x,
+        y: t.y + box.y,
+        w: box.w,
+        h: box.h
+      };
+
+      if (rectsOverlap(playerRect, treeRect)) {
         return true;
       }
     }
@@ -21,14 +45,11 @@ export function checkTreeCollisions(px, py, playerSize, trees) {
   return false;
 }
 
-export function checkBlockCollisions(px, py, playerSize, worldObjects, tileSize = 8) {
-  const half = playerSize / 2;
-  const playerBox = {
-    x: px - half,
-    y: py - half,
-    w: playerSize,
-    h: playerSize,
-  };
+// =============================
+// BLOCK COLLISIONS
+// =============================
+export function checkBlockCollisions(px, py, hitbox, worldObjects, tileSize = 8) {
+  const playerRect = getPlayerRect(px, py, hitbox);
 
   for (const obj of worldObjects) {
     const def = obj.def;
@@ -36,25 +57,26 @@ export function checkBlockCollisions(px, py, playerSize, worldObjects, tileSize 
 
     let bx, by, bw, bh;
 
-    // 🔹 Use custom collision box if block defines one (e.g., fence)
-    if (typeof def.getCollisionBox === 'function') {
+    // Custom collision box (fence, campfire, etc)
+    if (typeof def.getCollisionBox === "function") {
       const box = def.getCollisionBox(obj.x, obj.y);
       if (!box) continue;
-      ({ x: bx, y: by, w: bw, h: bh } = box);
+      bx = box.x;
+      by = box.y;
+      bw = box.w;
+      bh = box.h;
+
     } else {
-      // fallback: full tile
+      // Default: full tile
       bx = obj.x;
       by = obj.y;
       bw = def.width || tileSize;
       bh = def.height || tileSize;
     }
 
-    if (
-      playerBox.x < bx + bw &&
-      playerBox.x + playerBox.w > bx &&
-      playerBox.y < by + bh &&
-      playerBox.y + playerBox.h > by
-    ) {
+    const blockRect = { x: bx, y: by, w: bw, h: bh };
+
+    if (rectsOverlap(playerRect, blockRect)) {
       return true;
     }
   }

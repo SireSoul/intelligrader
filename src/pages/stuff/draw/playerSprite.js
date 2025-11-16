@@ -1,72 +1,104 @@
 // stuff/draw/playerSprite.js
-// Handles idle + walk animations using two sprite sheets.
+// Fully working Idle + Walk animation system for your 32×32 characters.
+
+const IDLE_SRC = "/characters/Idle.png";
+const WALK_SRC = "/characters/Walk.png";
 
 const FRAME_W = 32;
 const FRAME_H = 32;
-const FPS = 8; // walking speed
 
-let idleImg = null;
-let walkImg = null;
-let loaded = false;
+const DIR_DOWN  = 0;
+const DIR_LEFT  = 3;
+const DIR_RIGHT = 2;
+const DIR_UP    = 1;
 
-export function loadPlayerSprites() {
-  if (loaded) return;
+const IDLE_COLS = 4;
+const WALK_COLS = 6;
 
-  idleImg = new Image();
-  walkImg = new Image();
+const IDLE_FPS = 4;    // 4 fps
+const WALK_FPS = 10;   // 10 fps
 
-  let count = 0;
-  function done() {
-    count++;
-    if (count === 2) loaded = true;
+export function createPlayerSprite() {
+  // ---------- LOAD IMAGES ----------
+  const IdleImage = globalThis.Image || class {
+    constructor() { console.warn("Image() not available — running server-side"); }
+  };
+
+  const idleImg = new IdleImage();
+  const walkImg = new IdleImage();
+
+
+  let idleLoaded = false;
+  let walkLoaded = false;
+
+  idleImg.onload = () => (idleLoaded = true);
+  walkImg.onload = () => (walkLoaded = true);
+
+  idleImg.src = IDLE_SRC;
+  walkImg.src = WALK_SRC;
+
+  // ---------- STATE ----------
+  let facing = DIR_DOWN;
+  let frame = 0;
+  let timer = 0;
+  let moving = false;
+
+  function updateDirection(dx, dy) {
+    // prioritize horizontal movement ALWAYS
+    if (dx !== 0) {
+      facing = dx > 0 ? DIR_RIGHT : DIR_LEFT;
+    } else if (dy !== 0) {
+      facing = dy > 0 ? DIR_DOWN : DIR_UP;
+    }
   }
 
-  idleImg.onload = done;
-  walkImg.onload = done;
+  return {
+    update(dx, dy, dt) {
+      const wasMoving = moving;
+      moving = dx !== 0 || dy !== 0;
 
-  idleImg.src = "/characters/Idle.png";  // <-- adjust if needed
-  walkImg.src = "/characters/Walk.png";
-}
+      // --- Prioritize left/right ---
+      if (moving) updateDirection(dx, dy);
 
-/**
- * Draws the player using the correct animation based on movement.
- * @param {CanvasRenderingContext2D} ctx
- * @param {object} player - must contain x,y,dir,animFrame,animTimer,isMoving
- * @param {number} camX
- * @param {number} camY
- * @param {number} scale
- * @param {number} dt
- */
-export function drawAnimatedPlayer(ctx, player, camX, camY, scale, dt) {
-  if (!loaded) return;
+      // --- Reset frame when animation set changes ---
+      if (moving !== wasMoving) {
+        frame = 0;
+        timer = 0;
+      }
 
-  // Which sheet to use
-  const sheet = player.isMoving ? walkImg : idleImg;
+      timer += dt;
 
-  // Animation update
-  const maxFrames = 4;
-  player.animTimer += dt;
-  if (player.animTimer >= 60 / FPS) {
-    player.animTimer = 0;
-    player.animFrame = (player.animFrame + 1) % maxFrames;
-  }
+      if (moving) {
+        const frameTime = 60 / WALK_FPS;
+        if (timer >= frameTime) {
+          timer -= frameTime;
+          frame = (frame + 1) % WALK_COLS;
+        }
+      } else {
+        const frameTime = 60 / IDLE_FPS;
+        if (timer >= frameTime) {
+          timer -= frameTime;
+          frame = (frame + 1) % IDLE_COLS;
+        }
+      }
+    },
 
-  // Directions (rows):
-  // row 0 = down
-  // row 1 = left
-  // row 2 = right
-  // row 3 = up
-  const row = player.dir || 0; // default down
+    draw(ctx, player, camX, camY, scale) {
+      const img = moving ? walkImg : idleImg;
+      const loaded = moving ? walkLoaded : idleLoaded;
 
-  const sx = player.animFrame * FRAME_W;
-  const sy = row * FRAME_H;
+      if (!loaded) return;
 
-  const dx = Math.round((player.x - camX) * scale - FRAME_W / 2);
-  const dy = Math.round((player.y - camY) * scale - FRAME_H / 1.3);
+      const col = frame;
+      const row = facing;
 
-  ctx.drawImage(
-    sheet,
-    sx, sy, FRAME_W, FRAME_H,
-    dx, dy, FRAME_W * scale, FRAME_H * scale
-  );
+      const sx = col * FRAME_W;
+      const sy = row * FRAME_H;
+
+      const dx = Math.round((player.x - camX) * scale) - FRAME_W * scale / 2;
+      const dy = Math.round((player.y - camY) * scale) - FRAME_H * scale + player.size * scale * 0.5;
+
+      ctx.drawImage(img, sx, sy, FRAME_W, FRAME_H, dx, dy + 20, FRAME_W * scale, FRAME_H * scale);
+    },
+  };
 }

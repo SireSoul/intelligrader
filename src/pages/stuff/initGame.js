@@ -12,7 +12,7 @@ import {
   checkBlockCollisions as _checkBlockCollisions,
 } from './collisions.js';
 import {
-  drawWorld, drawPlayer, drawTrees,
+  drawWorld, drawTrees,
   updateDroppedItems, drawDroppedItems, tryPickupItems,
 } from './draw/world.js';
 import { loadTiledMap } from './world/loadMap.js';
@@ -36,7 +36,7 @@ import { Soundtrack } from './audio/soundtrack.js';
 import { updateTreeFade } from './world/treeFade.js';
 import { drawDialogueBubble } from './draw/dialogueBubble.js';
 import { drawHUD } from './draw/hud.js';
-import { loadPlayerSprites, drawAnimatedPlayer } from './draw/playerSprite.js';
+import { createPlayerSprite } from './draw/playerSprite.js';
 
 // Single player instance for the module (used by getPlayerPosition at bottom)
 const player = {
@@ -56,7 +56,13 @@ const player = {
   animFrame: 0,
   animTimer: 0,
   isMoving: false,
+
+  // Hitbox
+  hitW: 12,
+  hitH: 16,
+  hitOffsetY: 8,
 };
+player.sprite = createPlayerSprite();
 
 export function initGame({ canvas, router, dialogueRef }) {
   // ---------- canvas ----------
@@ -310,7 +316,7 @@ export function initGame({ canvas, router, dialogueRef }) {
       removeAllNPCs();
       spawnTestNPCs();
       autoAttachSchedules();
-      loadPlayerSprites();
+      // loadPlayerSprites();
 
       // start game loop
       rafId = requestAnimationFrame(loop);
@@ -328,41 +334,54 @@ export function initGame({ canvas, router, dialogueRef }) {
 
     // tree fade
     updateTreeFade(player, trees);
-
-    // movement
+    
+    // ---------- MOVEMENT INPUT ----------
     let dx = 0, dy = 0;
-    player.isMoving = false;
-    if (dx !== 0 || dy !== 0) {
-      player.isMoving = true;
 
-      if (Math.abs(dx) > Math.abs(dy)) {
-        player.dir = dx > 0 ? 2 : 1; // right : left
-      } else if (dy !== 0) {
-        player.dir = dy > 0 ? 0 : 3; // down : up
-      }
-    }
     if (keys['w'] || keys['ArrowUp'])    dy -= 1;
     if (keys['s'] || keys['ArrowDown'])  dy += 1;
     if (keys['a'] || keys['ArrowLeft'])  dx -= 1;
     if (keys['d'] || keys['ArrowRight']) dx += 1;
 
-    // Player position with collision
+    // ---------- NORMALIZE DIAGONAL ----------
+    if (dx !== 0 && dy !== 0) {
+      const s = 0.707106; // 1/√2
+      dx *= s;
+      dy *= s;
+    }
+
+    // ---------- SET MOVING STATE ----------
+    player.isMoving = dx !== 0 || dy !== 0;
+
+    // ---------- UPDATE FACING BEFORE ANIMATION ----------
+    if (player.isMoving) {
+      if (Math.abs(dx) > Math.abs(dy)) {
+        player.dir = dx > 0 ? 2 : 1; // right/left
+      } else {
+        player.dir = dy > 0 ? 0 : 3; // down/up
+      }
+    }
+
+    // ---------- UPDATE ANIMATION WITH REAL dx/dy ----------
+    player.sprite.update(dx, dy, dt);
+
+    // ---------- APPLY MOVEMENT ----------
     const nx = clamp(
       player.x + dx * player.speed,
       player.size / 2,
-      worldWidth  - player.size / 2,
+      worldWidth - player.size / 2
     );
     const ny = clamp(
       player.y + dy * player.speed,
       player.size / 2,
-      worldHeight - player.size / 2,
+      worldHeight - player.size / 2
     );
 
     if (
-      !_checkTreeCollisions(nx, ny, player.size, trees) &&
-      !_checkBlockCollisions(nx, ny, player.size, worldObjects, TILE_SIZE)
+      !_checkTreeCollisions(nx, ny, {w: player.hitW, h: player.hitH, offY: player.hitOffsetY}, trees) &&
+      !_checkBlockCollisions(nx, ny, {w: player.hitW, h: player.hitH, offY: player.hitOffsetY}, worldObjects, TILE_SIZE)
     ) {
-      const resolved = checkNPCCollisions(nx, ny, player.size);
+      const resolved = checkNPCCollisions(nx, ny, player);
       player.x = resolved.x;
       player.y = resolved.y;
     }
@@ -374,8 +393,22 @@ export function initGame({ canvas, router, dialogueRef }) {
       const targetX = clamp(player.x - vw / 2, 0, worldWidth  - vw);
       const targetY = clamp(player.y - vh / 2, 0, worldHeight - vh);
 
-      camX += (targetX - camX) * 0.12;
-      camY += (targetY - camY) * 0.12;
+      const dxCam = targetX - camX;
+      const dyCam = targetY - camY;
+
+      const dist = Math.hypot(dxCam, dyCam);
+
+      if (dist > 0.1) {
+        // normalize direction
+        const nxCam = dxCam / dist;
+        const nyCam = dyCam / dist;
+
+        const camSpeed = dist * 0.12; // keeps easing behavior
+
+        camX += nxCam * camSpeed;
+        camY += nyCam * camSpeed;
+      }
+
 
       camX = Math.round(camX);
       camY = Math.round(camY);
@@ -406,7 +439,7 @@ export function initGame({ canvas, router, dialogueRef }) {
     if (worldMap && tilesetImg) {
       drawWorld(ctx, worldMap, tilesetImg, ax, ay, vw, vh, zoom);
     }
-    drawAnimatedPlayer(ctx, player, ax, ay, scale);
+    player.sprite.draw(ctx, player, ax, ay, scale);
     drawNPCs(ctx, ax, ay, scale);
     drawDroppedItems(ctx, ax, ay, scale, itemSprites);
     drawTrees(ctx, treeImg, trees, ax, ay, scale);

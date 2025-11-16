@@ -39,7 +39,7 @@ const npcs = [];
 
 // spawn sample NPCs
 export function spawnTestNPCs() {
-  const sprite = loadImage('/npc_test.png');
+  // const sprite = loadImage('/npc_test.png');
 
   npcs.push(new NPC({
     id: 'bob',
@@ -105,27 +105,43 @@ export function handleNPCRightClick(mx, my, camX, camY, scale, dialogueRef, play
 }
 
 // player ↔ NPC collisions
-export function checkNPCCollisions(px, py, playerSize) {
-  const half = playerSize / 2;
-  const playerBox = { x: px - half, y: py - half, w: playerSize, h: playerSize };
+export function checkNPCCollisions(px, py, player) {
+  const hitW = player.hitW;
+  const hitH = player.hitH;
+  const offY = player.hitOffsetY;
+
+  const playerBox = {
+    x: px - hitW / 2,
+    y: py - hitH + offY,
+    w: hitW,
+    h: hitH
+  };
+
   let result = { x: px, y: py };
 
   for (const npc of npcs) {
     const box = npc.collisionBox;
+
     const cx = box.x + box.w / 2;
     const cy = box.y + box.h / 2;
 
+    // ---------- Circle NPC ----------
     if (npc.collisionShape === 'circle') {
-      const dx = result.x - cx;
-      const dy = result.y - cy;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const minDist = half + box.r;
-      if (dist < minDist) {
+      const dx = (playerBox.x + playerBox.w / 2) - cx;
+      const dy = (playerBox.y + playerBox.h / 2) - cy;
+
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const minDist = (Math.min(hitW, hitH) / 2) + box.r;
+
+      if (dist < minDist && dist > 0.0001) {
         const overlap = minDist - dist;
         result.x += (dx / dist) * overlap;
         result.y += (dy / dist) * overlap;
       }
-    } else {
+    }
+
+    // ---------- Square / Triangle NPC (AABB) ----------
+    else {
       if (
         playerBox.x < box.x + box.w &&
         playerBox.x + playerBox.w > box.x &&
@@ -135,9 +151,11 @@ export function checkNPCCollisions(px, py, playerSize) {
         const overlapX =
           Math.min(playerBox.x + playerBox.w, box.x + box.w) -
           Math.max(playerBox.x, box.x);
+
         const overlapY =
           Math.min(playerBox.y + playerBox.h, box.y + box.h) -
           Math.max(playerBox.y, box.y);
+
         if (overlapX < overlapY) {
           if (playerBox.x < box.x) result.x -= overlapX;
           else result.x += overlapX;
@@ -148,6 +166,7 @@ export function checkNPCCollisions(px, py, playerSize) {
       }
     }
   }
+
   return result;
 }
 
