@@ -3,7 +3,8 @@
 
 import {
   VIEW_W, VIEW_H, TILE_SIZE,
-  TREE_TILE_WIDTH, TREE_TILE_HEIGHT,
+  TREE_TILE_WIDTH, TREE_TILE_HEIGHT, 
+  STAMINA_DRAIN_PER_SEC, STAMINA_REGEN_PER_SEC, STAMINA_MIN_TO_MOVE
 } from './constants.js';
 import { clamp } from './math.js';
 import { loadImage, loadItemSprites } from './assets.js';
@@ -37,6 +38,7 @@ import { updateTreeFade } from './world/treeFade.js';
 import { drawDialogueBubble } from './draw/dialogueBubble.js';
 import { drawHUD } from './draw/hud.js';
 import { createPlayerSprite } from './draw/playerSprite.js';
+import { attachGameCursor } from './draw/gameCursor.js';
 
 // Single player instance for the module (used by getPlayerPosition at bottom)
 const player = {
@@ -68,6 +70,7 @@ export function initGame({ canvas, router, dialogueRef }) {
   // ---------- canvas ----------
   const ctx = canvas.getContext('2d', { alpha: false });
   const dpr = window.devicePixelRatio || 1;
+  attachGameCursor(canvas);
   canvas.width = VIEW_W * dpr;
   canvas.height = VIEW_H * dpr;
   canvas.style.imageRendering = 'pixelated';
@@ -351,10 +354,10 @@ export function initGame({ canvas, router, dialogueRef }) {
     }
 
     // ---------- SET MOVING STATE ----------
-    player.isMoving = dx !== 0 || dy !== 0;
+    player.isMoving = dx !== 0 || dy !== 0 && player.stamina > STAMINA_MIN_TO_MOVE;
 
     // ---------- UPDATE FACING BEFORE ANIMATION ----------
-    if (player.isMoving) {
+    if (player.isMoving && player.stamina <= STAMINA_MIN_TO_MOVE) {
       if (Math.abs(dx) > Math.abs(dy)) {
         player.dir = dx > 0 ? 2 : 1; // right/left
       } else {
@@ -385,6 +388,22 @@ export function initGame({ canvas, router, dialogueRef }) {
       player.x = resolved.x;
       player.y = resolved.y;
     }
+
+    player.isMoving = dx !== 0 || dy !== 0;
+
+    // ---------- STAMINA ----------
+    if (player.isMoving) {
+      player.stamina -= STAMINA_DRAIN_PER_SEC * dt;
+    } else {
+      player.stamina += STAMINA_REGEN_PER_SEC * dt;
+    }
+
+    // Clamp stamina
+    player.stamina = clamp(
+      player.stamina,
+      0,
+      player.maxStamina
+    );
 
     // camera update
     if (worldWidth && worldHeight) {
